@@ -1,0 +1,88 @@
+services:
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    container_name: elasticsearch-ik
+    restart: unless-stopped
+    platform: linux/amd64
+    environment:
+      # 集群配置
+      - cluster.name=elasticsearch-cluster
+      - node.name=es-node-1
+      - discovery.type=single-node
+      
+      # 内存配置 (M1芯片优化)
+      - ES_JAVA_OPTS=-Xms1g -Xmx1g
+      - bootstrap.memory_lock=true
+      
+      # 安全配置 (开发环境)
+      - xpack.security.enabled=false
+      - xpack.security.enrollment.enabled=false
+      - xpack.security.http.ssl.enabled=false
+      - xpack.security.transport.ssl.enabled=false
+      - xpack.ml.enabled=false
+      
+      # 网络配置
+      - network.host=0.0.0.0
+      - http.port=9200
+      - transport.port=9300
+      
+      # 性能优化
+      - indices.query.bool.max_clause_count=2048
+      - thread_pool.search.queue_size=1000
+      
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+      
+    volumes:
+      # 数据持久化
+      - es_data:/usr/share/elasticsearch/data
+      - es_logs:/usr/share/elasticsearch/logs
+      - ./config:/usr/share/elasticsearch/config/custom
+      
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+        
+    networks:
+      - es_network
+      
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.11.0
+    container_name: kibana-ik
+    restart: unless-stopped
+    platform: linux/amd64
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+      - SERVER_NAME=kibana
+      - SERVER_HOST=0.0.0.0
+      - xpack.security.enabled=false
+      - xpack.encryptedSavedObjects.encryptionKey=fhjskloppd678ehkdfdlliverpoolfcr
+    ports:
+      - "5601:5601"
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    networks:
+      - es_network
+
+volumes:
+  es_data:
+    driver: local
+  es_logs:
+    driver: local
+
+networks:
+  es_network:
+    driver: bridge
